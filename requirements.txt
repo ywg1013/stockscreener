@@ -1,0 +1,4 @@
+akshare
+dnspython
+openpyxl 
+pandas
