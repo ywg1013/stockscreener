@@ -46,7 +46,7 @@ def build_email(result_file):
     formatted = df.copy()
     if '净利润-同比增长' in formatted.columns:
         formatted['净利润-同比增长'] = formatted['净利润-同比增长'].apply(
-            lambda x: f"{float(x):.2f}%" if pd.notna(x) else ""
+            lambda x: f"{x:.2f}%" if pd.notna(x) else ""
         )
 
     # 纯文本内容
