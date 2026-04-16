@@ -45,6 +45,9 @@ def build_email(result_file):
 
     formatted = df.copy()
     if '净利润-同比增长' in formatted.columns:
+        formatted['净利润-同比增长'] = pd.to_numeric(
+            formatted['净利润-同比增长'].astype(str).str.replace('%', ''), errors='coerce'
+        )
         formatted['净利润-同比增长'] = formatted['净利润-同比增长'].apply(
             lambda x: f"{x:.2f}%" if pd.notna(x) else ""
         )
@@ -93,11 +96,11 @@ def build_email(result_file):
 
     html_body = f"""<html><body style="font-family:Arial,sans-serif;padding:20px;">
 <h2 style="color:#c0392b;">A股净利润高增长 + 近期涨停 筛选结果</h2>
-<p>日期：{date_str}</p>
+<p>日期：{date_str}</p >
 <div style="margin:15px 0;padding:12px;background:#fef9e7;border-left:4px solid #f39c12;">
 <strong>筛选条件：</strong><br>
 1. 非ST股票<br>
-2. 最近2年年度净利润同比增长均 &gt; 20% 或 连续2季度净利润同比增长均 &gt; 20%<br>
+2. 最近2年年度净利润同比增长均 &amp;gt; 20% 或 连续2季度净利润同比增长均 &amp;gt; 20%<br>
 3. 最近一个月有涨停记录<br>
 <strong>符合条件的股票数：{len(df)}</strong>
 </div>
