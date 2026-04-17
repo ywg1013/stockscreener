@@ -1,5 +1,5 @@
 # 定时运行 2 个 Python 脚本（北京时间每天 16:00）
-name: Run Python Scripts Daily
+name: Run Python-app Scripts Daily
 
 # 触发条件：定时 + 手动可运行
 on:
@@ -7,7 +7,7 @@ on:
   push:               # 防止仓库休眠（关键！）
     branches: [ main ]
   schedule:
-    - cron: "03 10 * * *"
+    - cron: "10 10 * * *"
 # 运行任务
 jobs:
   run-scripts:
