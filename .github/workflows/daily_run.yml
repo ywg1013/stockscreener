@@ -6,7 +6,9 @@ on:
   workflow_dispatch:
   # push:               # 防止仓库休眠（关键！）
   schedule:
-    - cron: "35 10 * * *"
+    - cron: "45 18 * * *"
+      timezone: Asia/Shanghai  # 支持IANA时区数据库格式
+
 # 运行任务
 jobs:
   run-scripts:
