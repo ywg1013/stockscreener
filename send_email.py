@@ -41,7 +41,10 @@ def build_email_content(result_file):
         df = pd.read_excel(result_file, engine='openpyxl')
     else:
         df = pd.read_csv(result_file)
-
+        
+    if '股票代码' in df.columns:
+        df['股票代码'] = df['股票代码'].astype(str).str.zfill(6)
+        
     date_str = datetime.now().strftime('%Y年%m月%d日')
 
     # 格式化百分比列
