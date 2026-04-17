@@ -4,8 +4,8 @@ name: Run Python Scripts Daily
 # 触发条件：定时 + 手动可运行
 on:
   schedule:
-    # 重点：UTC 9:00 = 北京时间 17:00（中国时区+8）
-    - cron: "0 9 * * *"
+    # 重点：UTC 8:00 = 北京时间 16:00（中国时区+8）
+    - cron: "0 8 * * *"
   # 允许你在 GitHub 页面手动点一下运行（测试用）
   workflow_dispatch:
 
