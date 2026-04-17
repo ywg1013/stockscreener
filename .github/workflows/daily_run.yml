@@ -4,8 +4,10 @@ name: Run Python Scripts Daily
 # 触发条件：定时 + 手动可运行
 on:
   workflow_dispatch:
+  push:               # 防止仓库休眠（关键！）
+    branches: [ main ]
   schedule:
-    - cron: "41 8 * * *"
+    - cron: "53 8 * * *"
 # 运行任务
 jobs:
   run-scripts:
