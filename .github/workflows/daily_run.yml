@@ -34,8 +34,12 @@ jobs:
 
       # 4. 依次运行 2 个脚本
       - name: Run stock_filter
+        env:
+          QQ_AUTH_CODE: ${{ secrets.QQ_MAIL_CODE }}
         run: python stock_filter.py
 
       - name: Run send_email
+        env:
+          QQ_AUTH_CODE: ${{ secrets.QQ_MAIL_CODE }}
         run: python send_email.py
 
