@@ -3,10 +3,9 @@ name: Run Python Scripts Daily
 
 # 触发条件：定时 + 手动可运行
 on:
-  schedule:
-    - cron: '24 8 * * *'
-  # 允许你在 GitHub 页面手动点一下运行（测试用）
   workflow_dispatch:
+  schedule:
+    - cron: '26 8 * * *'
 
 # 运行任务
 jobs:
