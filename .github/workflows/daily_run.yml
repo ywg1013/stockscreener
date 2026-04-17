@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   # push:               # 防止仓库休眠（关键！）
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/10 * * * *'
 
 # 运行任务
 jobs:
