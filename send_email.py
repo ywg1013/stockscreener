@@ -21,7 +21,7 @@ SMTP_PORT = 465
 SENDER_EMAIL = "281003252@qq.com"
 RECEIVER_EMAIL = "281003252@qq.com"
 SENDER_NAME = "A股筛选系统"
-QQ_AUTH_CODE = os.environ.get("QQ_AUTH_CODE", "gyygwyzeivxtbhce")
+QQ_AUTH_CODE = os.environ.get("QQ_AUTH_CODE", "")
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
 
 
