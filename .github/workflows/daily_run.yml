@@ -5,8 +5,7 @@ name: Run Python Scripts Daily
 on:
   workflow_dispatch:
   schedule:
-    - cron: '36 8 * * *'
-
+    - cron: "41 8 * * *"
 # 运行任务
 jobs:
   run-scripts:
