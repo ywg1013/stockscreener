@@ -7,7 +7,6 @@ on:
   # push:               # 防止仓库休眠（关键！）
   schedule:
     - cron: '*/15 * * * *'
-      timezone: Asia/Shanghai  # 支持IANA时区数据库格式
 
 # 运行任务
 jobs:
