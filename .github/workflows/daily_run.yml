@@ -23,7 +23,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11.1"
+          python-version: "3.11"
           cache: 'pip' 
 
       # 3. 安装依赖（如果有 requirements.txt 才需要这步）
