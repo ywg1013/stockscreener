@@ -24,6 +24,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11.1"
+          cache: 'pip' 
 
       # 3. 安装依赖（如果有 requirements.txt 才需要这步）
       - name: Install dependencies
