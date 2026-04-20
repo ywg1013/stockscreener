@@ -1,0 +1,45 @@
+# 定时运行 2 个 Python 脚本（北京时间每天 16:00）
+name: Run Python Scripts Daily
+
+# 触发条件：定时 + 手动可运行
+on:
+  workflow_dispatch:
+  # push:               # 防止仓库休眠（关键！）
+  schedule:
+    - cron: '8 6 * * *'
+
+# 运行任务
+jobs:
+  run-scripts:
+    # 使用最新 Ubuntu 服务器
+    runs-on: ubuntu-latest
+    # 执行步骤
+    steps:
+      # 1. 拉取你的代码
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # 2. 设置 Python 环境
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: 'pip' 
+
+      # 3. 安装依赖（如果有 requirements.txt 才需要这步）
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      # 4. 依次运行 2 个脚本
+      - name: Run oversold_screener
+        env: 
+          QQ_AUTH_CODE: ${{ secrets.QQ_AUTH_CODE }}
+        run: python oversold_screener.py
+
+      - name: Run send_oversold_email
+        env: 
+          QQ_AUTH_CODE: ${{ secrets.QQ_AUTH_CODE }}
+        run: python send_oversold_email.py
+
