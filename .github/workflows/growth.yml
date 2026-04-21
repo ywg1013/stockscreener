@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   # push:               # 防止仓库休眠（关键！）
   schedule:
-    - cron: '8 7 * * *'
+    - cron: '30 6 * * *'
 
 # 运行任务
 jobs:
@@ -38,8 +38,8 @@ jobs:
           QQ_AUTH_CODE: ${{ secrets.QQ_AUTH_CODE }}
         run: python stock_filter.py
 
-      - name: Run send_email
-        env: 
-          QQ_AUTH_CODE: ${{ secrets.QQ_AUTH_CODE }}
-        run: python send_email.py
+      # - name: Run send_email
+      #   env: 
+      #     QQ_AUTH_CODE: ${{ secrets.QQ_AUTH_CODE }}
+      #   run: python send_email.py
 
