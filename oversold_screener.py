@@ -21,7 +21,7 @@ MIN_INDICATORS = 6
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
 # ============ 超跌指标阈值 ============
-THRESHOLDS = {
+THRESHOLDS_ORI = {
     'bias_ma20': -10,
     'bias_ma60': -15,
     'below_ma_count': 3,
@@ -37,6 +37,21 @@ THRESHOLDS = {
     'ret_10d': -20,
 }
 
+THRESHOLDS = {
+    'bias_ma20': -20,
+    'bias_ma60': -30,
+    'below_ma_count': 3,
+    'rsi14': 25,
+    'kdj_j': 0,
+    'ret_20d': -20,
+    'ret_60d': -30,
+    'band_drop': -50,
+    'boll_pos': 15,
+    'low_vol_days': 2,
+    'max_consecutive_down': 5,
+    'ret_5d': -15,
+    'ret_10d': -20,
+}
 
 def get_all_stocks_sina():
     """新浪API获取全部A股列表+实时行情（含涨跌幅、年内涨跌等）"""
