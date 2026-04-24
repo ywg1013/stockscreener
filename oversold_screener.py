@@ -21,7 +21,7 @@ MIN_INDICATORS = 6
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
 # ============ 超跌指标阈值 ============
-THRESHOLDS_ORI = {
+THRESHOLDS = {
     'bias_ma20': -10,
     'bias_ma60': -15,
     'below_ma_count': 3,
@@ -37,7 +37,7 @@ THRESHOLDS_ORI = {
     'ret_10d': -20,
 }
 
-THRESHOLDS = {
+THRESHOLDS_opt = {
     'bias_ma20': -20,
     'bias_ma60': -30,
     'below_ma_count': 3,
