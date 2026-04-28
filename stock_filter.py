@@ -7,6 +7,7 @@ A股净利润高增长 + 近期涨停 股票筛选脚本
    条件B：最近连续2个季度净利润同比增长率均 > 20%
    满足条件A或条件B即可
 3. 最近一个月有涨停记录
+4. 当日收盘价不低于20日均价
 
 数据来源：东方财富（通过AKShare）
 """
@@ -221,6 +222,99 @@ def merge_growth_results(annual_df, quarterly_df):
     merged = merged.sort_values('净利润-同比增长', ascending=False).reset_index(drop=True)
 
     return merged
+
+
+def get_ma20_and_close(codes):
+    """
+    获取股票当日收盘价和20日均价，筛选收盘价>=20日均价的股票
+    使用新浪财经实时行情API
+    """
+    logger.info("=" * 60)
+    logger.info("开始筛选：当日收盘价不低于20日均价")
+    logger.info("=" * 60)
+
+    if not codes:
+        logger.warning("股票代码列表为空，跳过MA20筛选")
+        return set()
+
+    passed_codes = set()
+    total = len(codes)
+
+    # 使用腾讯财经API获取K线数据计算MA20
+    import requests as req
+
+    for i, code in enumerate(codes):
+        try:
+            # 确定市场前缀
+            if code.startswith('6'):
+                prefix = 'sh'
+            elif code.startswith('3') or code.startswith('0'):
+                prefix = 'sz'
+            else:
+                prefix = 'sh'
+
+            # 获取近30天日K线（前复权）
+            url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={prefix}{code},day,,,30,qfq"
+            resp = req.get(url, timeout=10)
+            data = resp.json()
+            key = f"{prefix}{code}"
+            raw = data['data'][key].get('qfqday', data['data'][key].get('day', []))
+
+            if len(raw) < 20:
+                logger.debug(f"  {code} K线数据不足20天，跳过")
+                continue
+
+            # 提取收盘价
+            closes = []
+            for r in raw:
+                if len(r) >= 4:
+                    closes.append(float(r[2]))  # close在第3列
+                elif len(r) >= 3:
+                    closes.append(float(r[2]))
+
+            if len(closes) < 20:
+                continue
+
+            # 当日收盘价（最后一天）
+            close_today = closes[-1]
+            # 20日均价
+            ma20 = sum(closes[-20:]) / 20
+
+            if close_today >= ma20:
+                passed_codes.add(code)
+                logger.debug(f"  ✅ {code}: 收盘价={close_today:.2f}, MA20={ma20:.2f}, 偏离={((close_today-ma20)/ma20*100):.2f}%")
+            else:
+                logger.debug(f"  ❌ {code}: 收盘价={close_today:.2f}, MA20={ma20:.2f}, 偏离={((close_today-ma20)/ma20*100):.2f}%")
+
+        except Exception as e:
+            logger.debug(f"  {code}: 获取MA20数据失败 - {e}")
+
+        # 控制请求频率，每50只休息1秒
+        if (i + 1) % 50 == 0:
+            logger.info(f"  MA20筛选进度: {i+1}/{total}")
+            time.sleep(0.5)
+
+    logger.info(f"收盘价>=MA20的股票数: {len(passed_codes)}/{total}")
+    return passed_codes
+
+
+def apply_ma20_filter(df, ma20_codes):
+    """在已有筛选结果上，进一步筛选收盘价>=20日均价的股票"""
+    logger.info("=" * 60)
+    logger.info("应用筛选：收盘价不低于20日均价")
+    logger.info("=" * 60)
+
+    if df.empty:
+        logger.warning("输入数据为空，跳过MA20筛选")
+        return df
+
+    before_count = len(df)
+    filtered_df = df[df['股票代码'].isin(ma20_codes)].copy()
+    after_count = len(filtered_df)
+
+    logger.info(f"筛选前: {before_count}只, 筛选后: {after_count}只, 过滤掉: {before_count - after_count}只")
+
+    return filtered_df
 
 
 def fetch_zt_pool_month():
@@ -445,6 +539,7 @@ def generate_email_html(df):
             1. 非ST股票<br>
             2. 最近2年年度净利润同比增长均 &gt; 20% 或 连续2季度净利润同比增长均 &gt; 20%<br>
             3. 最近一个月有涨停记录<br>
+            4. 当日收盘价不低于20日均价<br>
             <strong>符合条件的股票数：{len(df)}</strong>
         </div>
         <table>
@@ -531,19 +626,30 @@ def main():
         # ========== 第二步：获取近一个月涨停记录 ==========
         zt_codes, zt_stats = fetch_zt_pool_month()
 
-        # ========== 第三步：取交集 ==========
+        # ========== 第三步：取交集（高增长+涨停） ==========
         result_df = apply_zt_filter(growth_df, zt_codes, zt_stats)
 
         if result_df.empty:
             logger.info("无同时满足净利润高增长和近期涨停的股票")
         else:
+            logger.info(f"高增长+涨停筛选结果: {len(result_df)} 只股票")
+
+        # ========== 第四步：筛选收盘价>=20日均价 ==========
+        if not result_df.empty:
+            candidate_codes = result_df['股票代码'].tolist()
+            ma20_codes = get_ma20_and_close(candidate_codes)
+            result_df = apply_ma20_filter(result_df, ma20_codes)
+
+        if result_df.empty:
+            logger.info("最终无满足全部条件的股票")
+        else:
             logger.info(f"最终筛选结果: {len(result_df)} 只股票")
 
-        # ========== 第四步：保存结果 ==========
+        # ========== 第五步：保存结果 ==========
         output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
         csv_path, excel_path = save_results(result_df, output_dir)
 
-        # ========== 第五步：打印摘要 ==========
+        # ========== 第六步：打印摘要 ==========
         formatted = format_output(result_df)
         logger.info("\n" + "=" * 60)
         logger.info("筛选结果摘要:")
@@ -554,7 +660,7 @@ def main():
         else:
             logger.info("无满足条件的股票")
 
-        # ========== 第六步：发送邮件 ==========
+        # ========== 第七步：发送邮件 ==========
         send_email(result_df, excel_path)
 
         elapsed = time.time() - start_time
