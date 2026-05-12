@@ -52,7 +52,7 @@ GROWTH_THRESHOLD = 0.20   # 利润增长率阈值（20%）
 CONSECUTIVE_PERIODS = 2   # 需要连续几期满足增长
 
 # --- 输出目录（确保有写权限） ---
-OUTPUT_DIR = "/tmp/volume_surge"
+OUTPUT_DIR = "./"
 
 
 # ═══════════════════════════════════════════════════════════════
