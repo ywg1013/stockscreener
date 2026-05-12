@@ -18,7 +18,7 @@ import os
 import sys
 import json
 
-OUTPUT_DIR = "./"
+OUTPUT_DIR = "/tmp/volume_surge"
 
 # ─── 全局变量：缓存股票列表 ───
 STOCK_LIST = []
