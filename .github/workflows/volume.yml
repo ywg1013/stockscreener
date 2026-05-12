@@ -33,10 +33,10 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       # 4. 依次运行 2 个脚本
-      - name: Run volume_surge
-        env: 
-          QQ_AUTH_CODE: ${{ secrets.QQ_AUTH_CODE }}
-        run: python volume_surge.py
+    #- name: Run volume_surge
+      # env: 
+      #   QQ_AUTH_CODE: ${{ secrets.QQ_AUTH_CODE }}
+      # run: python volume_surge.py
 
       - name: Run send_volume_email
         env: 
