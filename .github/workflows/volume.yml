@@ -1,5 +1,5 @@
 # 定时运行 2 个 Python 脚本（北京时间每天 16:00）
-name: Run volume  Scripts Daily
+name: Run Volume Surge Scripts Daily
 
 # 触发条件：定时 + 手动可运行
 on:
