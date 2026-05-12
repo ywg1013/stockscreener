@@ -2,3 +2,4 @@ akshare
 dnspython
 openpyxl 
 pandas
+baostock
