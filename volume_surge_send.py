@@ -42,7 +42,7 @@ from email import encoders
 SMTP_SERVER   = "smtp.qq.com"
 SMTP_PORT     = 465
 SENDER_EMAIL  = "281003252@qq.com"
-SENDER_AUTH   = "gyygwyzeivxtbhce"       # QQ邮箱授权码
+SENDER_AUTH   = os.environ.get("QQ_AUTH_CODE", "")       # QQ邮箱授权码
 RECEIVER_EMAIL = "281003252@qq.com"        # 收件人（可多个，逗号分隔）
 MAIL_SUBJECT_PREFIX = "A股量能放大+基本面筛选"
 
