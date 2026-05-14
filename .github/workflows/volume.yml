@@ -36,5 +36,5 @@ jobs:
       - name: Run send_volume_email
         env: 
           QQ_AUTH_CODE: ${{ secrets.QQ_AUTH_CODE }}
-        run: python volume_surge_send.py
+        run: python volume_surge_async.py
 
