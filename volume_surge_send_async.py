@@ -229,74 +229,152 @@ async def fetch_kline_volume(session, symbol):
 
 
 # ═══════════════════════════════════════════════════════════════
-#  第二步：新浪财务——净利润增长率
+#  第二步：EM财务接口——净利润增长率 + PE-TTM
 # ═══════════════════════════════════════════════════════════════
 
-async def fetch_growth(session, code, semaphore):
+async def fetch_finance(session, code, semaphore):
     """
-    从新浪财务指标页面爬取净利润同比增长率
-    code: 纯数字 600519
-    返回: [增长率1, 增长率2, ...] 或 None
+    从东方财富emweb接口获取财务数据
+    返回: {"quarterly": [g1, g2], "annual": [g1, g2], "pe_ttm": float} 或 None
+    - quarterly: 最近2个季度报告的增长率
+    - annual: 最近2个年度报告的增长率
+    - pe_ttm: 滚动市盈率
     """
     if code in growth_cache:
         return growth_cache[code]
 
     async with semaphore:
         try:
+            # 构建EM代码：6开头=SH，其余=SZ
+            prefix = "SH" if code.startswith("6") else "SZ"
+            em_code = f"{prefix}{code}"
+
             url = (
-                "https://money.finance.sina.com.cn/"
-                "corp/go.php/vFD_FinancialGuideLine/"
-                f"stockid/{code}/ctrl/2026/displaytype/4.phtml"
+                "https://emweb.securities.eastmoney.com/"
+                "PC_HSF10/NewFinanceAnalysis/ZYZBAjaxNew"
+                f"?type=0&code={em_code}"
             )
             async with session.get(url, timeout=10) as resp:
-                html = await resp.text()
+                text = await resp.text()
 
-            # 匹配净利润增长率行
-            row_match = re.search(r'净利润增长率.*?</tr>', html, re.DOTALL)
-            if not row_match:
+            data = json.loads(text)
+            if not data or "data" not in data or not data["data"]:
                 growth_cache[code] = None
                 return None
 
-            # 提取该行所有数值
-            nums = re.findall(r'>(-?\d+\.?\d*)<', row_match.group())
-            if len(nums) < 2:
-                growth_cache[code] = None
-                return None
+            records = data["data"]
 
-            # 前4个数值是最近4个季度的增长率
-            growths = [float(x) for x in nums[:4]]
+            # 提取季度和年度增长率
+            quarterly_growths = []  # 季度报告(一季报/中报/三季报)
+            annual_growths = []     # 年度报告(年报)
 
-            # 存缓存
-            growth_cache[code] = growths
-            return growths
+            for item in records:
+                report_type = item.get("REPORT_TYPE", "")
+                yoy = item.get("DJD_DPNP_YOY")  # 单季度归母净利润同比增长率
+                if yoy is None:
+                    continue
+                yoy_pct = float(yoy)  # 已经是百分比形式（如20.5表示20.5%）
+
+                if report_type == "年报":
+                    annual_growths.append(yoy_pct)
+                else:
+                    quarterly_growths.append(yoy_pct)
+
+            # 计算PE-TTM: 股价 / 最近4个季度EPS之和
+            # EPSJB是累计每股收益，需要计算TTM
+            eps_values = []
+            for item in records:
+                eps = item.get("EPSJB")
+                if eps is not None and eps != "":
+                    eps_values.append(float(eps))
+
+            pe_ttm = None
+            if len(eps_values) >= 2:
+                # TTM EPS = 年报EPS + 最新Q1EPS - 去年Q1EPS (简化)
+                # 更准确：找最近4个单季度EPS
+                # 但EPSJB是累计值，用年报+倒推计算
+                # 简化方案：用最近年报EPS作为近似（偏低但保守）
+                # 更好方案：用最近4个报告期推算
+                ttm_eps = _calc_ttm_eps(records)
+                if ttm_eps and ttm_eps > 0:
+                    # 股价后面传入，这里先存ttm_eps
+                    pe_ttm = ttm_eps
+
+            result = {
+                "quarterly": quarterly_growths[:2],
+                "annual": annual_growths[:2],
+                "ttm_eps": pe_ttm,  # 存EPS，PE后面用股价算
+            }
+
+            growth_cache[code] = result
+            return result
 
         except:
             growth_cache[code] = None
             return None
 
 
-# ═══════════════════════════════════════════════════════════════
-#  第三步：PE-TTM（新浪行情无法直接获取，用替代方案）
-# ═══════════════════════════════════════════════════════════════
-
-async def fetch_pe(session, code):
+def _calc_ttm_eps(records):
     """
-    从新浪获取PE-TTM
-    code: 纯数字
+    从EM财务数据计算TTM EPS（最近12个月每股收益）
+    records按报告期降序排列
     """
-    try:
-        # 新浪个股基本面接口
-        url = f"https://money.finance.sina.com.cn/corp/go.php/vFD_BasicCorpInfoNew/stockid/{code}/ctrl/partDisplayNo/stock_type/1.phtml"
-        async with session.get(url, timeout=8) as resp:
-            html = await resp.text()
+    # 尝试获取: 最新年报EPS + 最新一季报EPS - 去年一季报EPS
+    annual_eps = {}  # year -> eps
+    q1_eps = {}      # year -> eps (一季报)
+    h1_eps = {}      # year -> eps (中报)
+    q3_eps = {}      # year -> eps (三季报)
 
-        # 尝试从页面提取PE
-        pe_match = re.search(r'市盈率.*?(-?\d+\.?\d*)', html)
-        if pe_match:
-            return float(pe_match.group(1))
-        return None
-    except:
-        return None
+    for item in records:
+        rt = item.get("REPORT_TYPE", "")
+        eps = item.get("EPSJB")
+        rd = item.get("REPORT_DATE", "")
+        if eps is None or eps == "" or not rd:
+            continue
+        eps = float(eps)
+        year = int(rd[:4])
+
+        if rt == "年报":
+            annual_eps[year] = eps
+        elif rt == "一季报":
+            q1_eps[year] = eps
+        elif rt == "中报":
+            h1_eps[year] = eps
+        elif rt == "三季报":
+            q3_eps[year] = eps
+
+    # TTM EPS 计算: 找最近的完整4个季度
+    # 优先方案: 最新一季报EPS + (最新年报EPS - 去年同期EPS)
+    years = sorted(annual_eps.keys(), reverse=True)
+    q1_years = sorted(q1_eps.keys(), reverse=True)
+
+    if years and q1_years:
+        latest_year = years[0]
+        latest_q1_year = q1_years[0]
+
+        # 如果最新一季报的年份 > 年报年份
+        if latest_q1_year > latest_year and latest_q1_year - 1 in annual_eps:
+            ttm = q1_eps[latest_q1_year] + annual_eps[latest_q1_year - 1] - q1_eps.get(latest_q1_year - 1, 0)
+            return ttm if ttm > 0 else None
+
+        # 如果最新中报年份 > 年报年份
+        h1_years = sorted(h1_eps.keys(), reverse=True)
+        if h1_years and h1_years[0] > latest_year and h1_years[0] - 1 in annual_eps:
+            ttm = h1_eps[h1_years[0]] + annual_eps[h1_years[0] - 1] - h1_eps.get(h1_years[0] - 1, 0)
+            return ttm if ttm > 0 else None
+
+        # 如果最新三季报年份 > 年报年份
+        q3_years = sorted(q3_eps.keys(), reverse=True)
+        if q3_years and q3_years[0] > latest_year and q3_years[0] - 1 in annual_eps:
+            ttm = q3_eps[q3_years[0]] + annual_eps[q3_years[0] - 1] - q3_eps.get(q3_years[0] - 1, 0)
+            return ttm if ttm > 0 else None
+
+    # 降级: 直接用最新年报EPS
+    if years:
+        eps = annual_eps[years[0]]
+        return eps if eps > 0 else None
+
+    return None
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -377,39 +455,50 @@ async def run_screening():
         if not volume_candidates:
             return pd.DataFrame(), stats
 
-        # ── 第3步：财务增长筛选 ──
-        print("\n[3/3] 财务增长筛选...")
+        # ── 第3步：财务增长+PE筛选 ──
+        print("\n[3/3] 财务增长+PE筛选...")
         finance_sem = asyncio.Semaphore(FINANCE_CONCURRENT)
 
-        # 批量查增长
-        growth_tasks = []
+        # 批量查财务
+        finance_tasks = []
         for item in volume_candidates:
-            growth_tasks.append(fetch_growth(session, item['code'], finance_sem))
+            finance_tasks.append(fetch_finance(session, item['code'], finance_sem))
 
-        growth_results = await asyncio.gather(*growth_tasks)
+        finance_results = await asyncio.gather(*finance_tasks)
 
         final_results = []
         for j, item in enumerate(volume_candidates):
-            growth = growth_results[j]
+            finance = finance_results[j]
 
-            if growth is None or len(growth) < CONSECUTIVE_PERIODS:
+            if finance is None:
                 stats['no_growth_data'] += 1
                 continue
 
-            # 检查连续N期增长>阈值
-            pass_count = 0
-            for g in growth[:CONSECUTIVE_PERIODS]:
-                if g > GROWTH_THRESHOLD:
-                    pass_count += 1
+            # ── 增长筛选: 最近2季度>20% OR 最近2年度>20% ──
+            quarterly = finance.get("quarterly", [])
+            annual = finance.get("annual", [])
+            ttm_eps = finance.get("ttm_eps")
 
-            if pass_count < CONSECUTIVE_PERIODS:
+            # 检查: 最近2个季度增长均>阈值
+            q_pass = (len(quarterly) >= CONSECUTIVE_PERIODS and
+                      all(g > GROWTH_THRESHOLD for g in quarterly[:CONSECUTIVE_PERIODS]))
+
+            # 检查: 最近2个年度报告增长均>阈值
+            a_pass = (len(annual) >= CONSECUTIVE_PERIODS and
+                      all(g > GROWTH_THRESHOLD for g in annual[:CONSECUTIVE_PERIODS]))
+
+            if not q_pass and not a_pass:
                 stats['growth_filtered'] += 1
                 continue
 
-            # PE过滤：用动态市盈率 = 现价/每股收益（近似）
-            # 新浪行情无法直接获取PE，跳过PE过滤或用简单估算
-            # 这里暂跳过PE过滤，保留所有通过的
-            # 如需PE，可后续单独获取
+            # ── PE筛选: PE-TTM > 0 ──
+            pe_ttm = None
+            if ttm_eps and ttm_eps > 0 and item['current'] > 0:
+                pe_ttm = round(item['current'] / ttm_eps, 2)
+
+            if pe_ttm is None or pe_ttm <= 0:
+                stats['pe_filtered'] += 1
+                continue
 
             ratio = item['ratio']
             entry = {
@@ -417,21 +506,33 @@ async def run_screening():
                 '名称': item['name'],
                 '现价': round(item['current'], 2),
                 '涨幅%': round((item['current'] - item['pre_close']) / item['pre_close'] * 100, 2),
+                'PE_TTM': pe_ttm,
                 '近2日均量': int(item['recent_2']),
                 '前7日均量': int(item['prev_7']),
                 '量比倍数': round(ratio, 2),
             }
 
-            # 动态增长列
-            for idx in range(CONSECUTIVE_PERIODS):
-                prefix = "近" if idx == 0 else "前"
-                entry[f'{prefix}{idx+1}期利润增长'] = f"{growth[idx]:.1f}%"
+            # 增长列: 优先展示通过的维度
+            if q_pass:
+                for idx in range(min(CONSECUTIVE_PERIODS, len(quarterly))):
+                    prefix = "近" if idx == 0 else "前"
+                    entry[f'{prefix}{idx+1}季增长'] = f"{quarterly[idx]:.1f}%"
+            if a_pass:
+                for idx in range(min(CONSECUTIVE_PERIODS, len(annual))):
+                    prefix = "近" if idx == 0 else "前"
+                    entry[f'{prefix}{idx+1}年增长'] = f"{annual[idx]:.1f}%"
 
             final_results.append(entry)
             stats['final_pass'] += 1
 
-            growth_str = " / ".join(f"{growth[k]:.1f}%" for k in range(CONSECUTIVE_PERIODS))
-            print(f"  [通过] {item['code']} {item['name']:<10} 量比={ratio:.2f}x  增长={growth_str}")
+            # 日志
+            parts = []
+            if q_pass:
+                parts.append(f"季增长={'/'.join(f'{g:.1f}%' for g in quarterly[:2])}")
+            if a_pass:
+                parts.append(f"年增长={'/'.join(f'{g:.1f}%' for g in annual[:2])}")
+            growth_str = " ".join(parts)
+            print(f"  [通过] {item['code']} {item['name']:<10} 量比={ratio:.2f}x PE={pe_ttm:.1f} {growth_str}")
 
         # 保存缓存
         save_cache()
@@ -478,7 +579,9 @@ def gen_html(df, ts, stats):
       <div class="fn-arrow">&rarr;</div>
       <div class="fn-item"><span class="fn-num">{stats['volume_pass']}</span><span class="fn-lbl">量能&ge;{VOLUME_RATIO}倍</span></div>
       <div class="fn-arrow">&rarr;</div>
-      <div class="fn-item fn-final"><span class="fn-num">{stats['final_pass']}</span><span class="fn-lbl">连续增长&gt;{GROWTH_THRESHOLD:.0f}%</span></div>
+      <div class="fn-item"><span class="fn-num">{stats['total'] - stats['volume_pass'] - stats['no_growth_data'] - stats['growth_filtered'] - stats['pe_filtered'] - stats['final_pass'] if False else stats['volume_pass'] - stats['pe_filtered'] - stats['growth_filtered'] - stats['no_growth_data']}</span><span class="fn-lbl">PE&gt;0</span></div>
+      <div class="fn-arrow">&rarr;</div>
+      <div class="fn-item fn-final"><span class="fn-num">{stats['final_pass']}</span><span class="fn-lbl">增长&ge;{GROWTH_THRESHOLD:.0f}%</span></div>
     </div>"""
 
     date_str = f"{ts[:4]}-{ts[4:6]}-{ts[6:8]}"
@@ -520,7 +623,8 @@ tr:hover td{{background:#fffbf0;}}
   <b>筛选条件：</b><br>
   1. 近2个交易日均量 &ge; 两天前过去7个交易日均量 &times; {VOLUME_RATIO}<br>
   2. 剔除 ST/*ST / 退市 / 停牌股票<br>
-  3. 连续{CONSECUTIVE_PERIODS}期净利润同比增长率 &gt; {GROWTH_THRESHOLD:.0f}%<br>
+  3. 连续{CONSECUTIVE_PERIODS}期季度净利润同比增长率 &gt; {GROWTH_THRESHOLD:.0f}% <b>或</b> 连续{CONSECUTIVE_PERIODS}期年度净利润同比增长率 &gt; {GROWTH_THRESHOLD:.0f}%<br>
+  4. PE-TTM &gt; 0（剔除负市盈率）<br>
   数据截止：{date_str} &nbsp;|&nbsp; 数据来源：新浪财经
 </div>
 <div class="stats">
@@ -592,7 +696,8 @@ async def async_main():
     print(f"\n筛选条件:")
     print(f"  1. 近2日均量 >= 前7日均量 x {VOLUME_RATIO}")
     print(f"  2. 剔除 ST/*ST")
-    print(f"  3. 连续{CONSECUTIVE_PERIODS}期利润增长 > {GROWTH_THRESHOLD:.0f}%")
+    print(f"  3. 连续{CONSECUTIVE_PERIODS}期季度利润增长 > {GROWTH_THRESHOLD:.0f}% 或 连续{CONSECUTIVE_PERIODS}期年度利润增长 > {GROWTH_THRESHOLD:.0f}%")
+    print(f"  4. PE-TTM > 0")
 
     # --- 筛选 ---
     result_df, stats = await run_screening()
