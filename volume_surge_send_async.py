@@ -246,7 +246,7 @@ async def fetch_growth(session, code, semaphore):
             url = (
                 "https://money.finance.sina.com.cn/"
                 "corp/go.php/vFD_FinancialGuideLine/"
-                f"stockid/{code}/ctrl/2020/displaytype/4.phtml"
+                f"stockid/{code}/ctrl/2026/displaytype/4.phtml"
             )
             async with session.get(url, timeout=10) as resp:
                 html = await resp.text()
